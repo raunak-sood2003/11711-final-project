@@ -3,9 +3,11 @@ from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 
-model_name = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+model_name = "Qwen/Qwen2.5-Coder-7B-Instruct"
 output_logits = True
 repeat = 100
+
+torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # define prompt template
 prompt_template = """
@@ -36,9 +38,8 @@ def process_model_input(prompt):
 # init model
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    torch_dtype="auto",
-    device_map="auto"
-)
+    torch_dtype="auto"
+).to(device)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 # init dataset
@@ -63,11 +64,13 @@ for i, data in enumerate(dataset['test']):
         # process output
         generation_output = model.generate(
             **model_inputs,
-            max_new_tokens=512, 
-            num_beams = 1,
-            do_sample=True, 
-            return_dict_in_generate=True, 
-            output_scores=True, 
+            max_new_tokens=128,
+            do_sample=True,
+            temperature=0.8,
+            top_p=0.95,
+            eos_token_id=tokenizer.eos_token_id,
+            output_scores=True,
+            return_dict_in_generate=True,
         )
         generated_ids = generation_output.sequences
         logprobs = model.compute_transition_scores(generation_output.sequences, generation_output.scores, normalize_logits=True)
@@ -75,7 +78,7 @@ for i, data in enumerate(dataset['test']):
         #logits = generation_output.sequences.logits
         #logprobs = F.log_softmax(logits, dim=-1).detach().cpu().to_list()
 
-        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, output_logits=True)[0]
+        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         # record output
         output_dict = {"task_id": task_id, \
