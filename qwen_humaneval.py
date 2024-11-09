@@ -4,14 +4,15 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 import json
 import math
+import re
 #import torch
 
 model_name = "Qwen/Qwen2.5-Coder-7B-Instruct"
 output_logits = True
-output_file = "qwen_humaneval_programs_k100_temp0.8.jsonl"
 repeat = 100
 batch_size = 4
-mode = "program"
+mode = "test"
+output_file = f"qwen_humaneval_{mode}_k100_temp0.8.jsonl"
 
 #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -22,13 +23,25 @@ if mode == "program":
                     {code_prompt}\
                     """
 elif mode == "test":
+    #prompt_template = """
+    #                Generate test cases for the function below and do not explain: \n
+    #                {code_prompt}\
+    #                """
     prompt_template = """
-                    Generate test cases for the function below and do not explain: \n
-                    {code_prompt}\
+                    {code_prompt} \n
+                    # Write assert test cases for the function above and do not explain\n
                     """
 else:
     raise Exception("mode should be either program or test")
 
+def remove_docstring(code):
+    """
+    Removes the docstring from the provided code string.
+    """
+    # Use regex to remove triple-quoted docstrings immediately following a function definition
+    pattern = r'(\"\"\"[\s\S]*?\"\"\")|(\'\'\'[\s\S]*?\'\'\')'
+    code_no_docstring = re.sub(pattern, '', code, count=1)
+    return code_no_docstring
 
 def write_json_file(dicts, output_file):
     with open(output_file, 'w') as f:
@@ -73,7 +86,7 @@ for i, data in tqdm(enumerate(dataset['test'])):
     print(f"{i} / {len(dataset['test'])}")
     # parse data
     task_id = data['task_id']
-    prompt = data['prompt']
+    prompt = data['prompt'] if mode=="program" else remove_docstring(data['prompt'])
     
 
     # repeat 100 times
